@@ -14,7 +14,7 @@ func (db *DB) TopHeadlines(ctx context.Context, lang string) ([]config.Article, 
 		return nil, errors.New("The specified language isn't a supported language")
 	}
 
-	stmt := "SELECT source,author,description,publishedAt,title,url,urlToImage FROM news WHERE lang=$1;"
+	stmt := "SELECT publisherID,publisherName,author,description,publishedAt,title,url,urlToImage FROM news WHERE lang=$1;"
 
 	rows, err := db.QueryContext(ctx, stmt, lang)
 	if err != nil {
@@ -23,15 +23,15 @@ func (db *DB) TopHeadlines(ctx context.Context, lang string) ([]config.Article, 
 
 	defer rows.Close()
 
-	ths := make([]config.Article, 0)
+	arts := make([]config.Article, 0)
 	for rows.Next() {
 		th := new(config.Article)
-		if err := rows.Scan(&th.Source, &th.Author, &th.Description, &th.PublishedAt, &th.Title, &th.URL, &th.URLToImage); err != nil {
+		if err := rows.Scan(&th.PublisherID, &th.PublisherName, &th.Author, &th.Description, &th.PublishedAt, &th.Title, &th.URL, &th.URLToImage); err != nil {
 			return nil, err
 		}
 
-		ths = append(ths, *th)
+		arts = append(arts, *th)
 	}
 
-	return ths, nil
+	return arts, nil
 }

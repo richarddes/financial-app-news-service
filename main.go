@@ -77,6 +77,8 @@ var (
 )
 
 func main() {
+	ctx := context.Background()
+
 	connStr := fmt.Sprintf("port=%s user=%s password=%s dbname=%s host=%s sslmode=disable", dbPort, dbUser, dbPass, dbName, dbHost)
 	db, err := models.New(connStr)
 	if err != nil {
@@ -92,12 +94,46 @@ func main() {
 
 	env = &config.Env{DB: db, NewsClient: nf}
 
-	go env.NewsClient.FetchAndSave(context.Background(), env, time.Minute*15)
+	go env.NewsClient.FetchAndSave(ctx, env, time.Minute*15)
+
+	config.Publishers = make(map[string][]config.Publisher, len(config.SupportedLangs))
+	for _, lang := range config.SupportedLangs {
+		publishers, err := env.NewsClient.Publishers(ctx, lang)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		config.Publishers[lang] = publishers
+	}
+
+	go func() {
+		for lang, publishers := range config.Publishers {
+			publisherIDs := make([]string, len(publishers))
+
+			for i, pub := range publishers {
+				publisherIDs[i] = pub.ID
+			}
+
+			arts, err := env.NewsClient.PublisherArticles(ctx, lang, publisherIDs)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			for _, art := range arts {
+				err = env.DB.InsertArticle(ctx, art)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
+	}()
 
 	r := mux.NewRouter()
 
 	api := r.PathPrefix("/api/news").Subrouter()
 	api.HandleFunc("/top-headlines", handler.HandleTopHeadlines(env)).Methods("GET")
+	api.HandleFunc("/publishers", handler.HandlePublishers(env)).Methods("GET")
+	api.HandleFunc("/publisher-news", handler.HandlePublisherNews(env)).Methods("POST")
 
 	fmt.Println("The news server is ready")
 	log.Fatal(http.ListenAndServe(":8083", r))
